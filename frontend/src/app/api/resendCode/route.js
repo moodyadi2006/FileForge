@@ -1,6 +1,6 @@
 import dbConnect from "@/lib/dbConnect";
 import UserModel from "@/model/User";
-import { sendVerificationEmail } from "@/helpers/sendVerificationEmails";
+import { sendVerificationEmail } from "../../../helpers/SendVerificationEmails.jsx";
 
 export async function POST(request) {
   await dbConnect();
