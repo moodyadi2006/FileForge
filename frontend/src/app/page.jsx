@@ -1,16 +1,13 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Home,
   Plus,
   CheckCircle,
-  Loader,
   User,
   LogOut,
   X,
   Settings,
-  MessageSquare,
-  Download,
   FileArchive,
   ArrowDownToLine,
   Workflow,
@@ -18,6 +15,9 @@ import {
   FileUp,
   FunctionSquare,
   Zap,
+  FileText,
+  Database,
+  Clock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -37,13 +37,12 @@ export default function FileForgeHome() {
   const [toastMessage, setToastMessage] = useState("");
   const [isChat, setIsChat] = useState(false);
   const [initialResult, setInitialResult] = useState(null);
-  console.log(initialResult);
   const [dots, setDots] = useState([]);
   const [user, setUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [mode, setMode] = useState(null);
   const { data: session, status } = useSession();
   const router = useRouter();
-  const recognition = useRef(null);
   const fileInputRef = useRef(null);
   const comparisonChartRef = useRef(null);
   const donutChartRef = useRef(null);
@@ -59,261 +58,445 @@ export default function FileForgeHome() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  // Get algorithm color scheme
-  const getAlgorithmColors = (mode) => {
-    const colorSchemes = {
-      huffmanCoding: {
-        primary: "#00d4ff",
-        secondary: "#6366f1",
-        accent: "#8b5cf6",
-        gradient: ["#00d4ff", "#6366f1", "#8b5cf6"],
-      },
-      runLengthEncoding: {
-        primary: "#ff6b6b",
-        secondary: "#ff8787",
-        accent: "#ffa8a8",
-        gradient: ["#ff6b6b", "#ff8787", "#ffa8a8"],
-      },
-      visuaLens: {
-        primary: "#51cf66",
-        secondary: "#69db7c",
-        accent: "#8ce99a",
-        gradient: ["#51cf66", "#69db7c", "#8ce99a"],
-      },
+  // Only comparison chart ref for decompressed files
+  const decompressedComparisonChartRef = useRef(null);
+
+  // Single animation step for decompressed chart
+  const [decompressedAnimationStep, setDecompressedAnimationStep] = useState(0);
+
+  // Get decompressed file stats
+  if (initialResult && initialResult.file_info) {
+    // Calculate decompressed stats directly
+    const decompressedStats = {
+      originalSize: initialResult?.file_info.compressed_file_size || 0,
+      decompressedSize: initialResult?.file_info.decompressed_size || 0,
+      expansionRatio:
+        initialResult?.file_info.compressed_file_size &&
+        initialResult?.file_info.decompressed_size
+          ? (
+              initialResult.file_info.decompressed_size /
+              initialResult.file_info.compressed_file_size
+            ).toFixed(2)
+          : 0,
+      sizeDifferencePercent:
+        initialResult?.file_info.compressed_file_size &&
+        initialResult?.file_info.decompressed_size
+          ? (
+              ((initialResult.file_info.decompressed_size -
+                initialResult.file_info.compressed_file_size) /
+                initialResult.file_info.compressed_file_size) *
+              100
+            ).toFixed(1)
+          : 0,
     };
-    return colorSchemes[mode] || colorSchemes.huffmanCoding;
-  };
 
-  const colors = getAlgorithmColors(initialResult?.mode);
-
-  // Create stats object for chart data
-  const stats = {
-    originalSize: initialResult?.original_size || 0,
-    compressedSize: initialResult?.compressed_size || 0,
-    compressionRatio: parseFloat(initialResult?.compression_ratio) || 0,
-    spaceSaved:
-      parseFloat(initialResult?.space_saved_percent?.replace("%", "")) || 0,
-  };
-
-  useEffect(() => {
-    // Animate components in sequence
-    const timer = setTimeout(() => {
-      if (animationStep < 3) {
-        setAnimationStep(animationStep + 1);
-      }
-    }, 600);
-
-    return () => clearTimeout(timer);
-  }, [animationStep]);
-
-  useEffect(() => {
-    let comparisonChart, donutChart, efficiencyChart;
-
-    // Comparison Bar Chart
-    if (comparisonChartRef.current && animationStep >= 1) {
-      const ctx = comparisonChartRef.current.getContext("2d");
-
-      comparisonChart = new Chart.Chart(ctx, {
-        type: "bar",
-        data: {
-          labels: ["Original File", "Compressed File"],
-          datasets: [
-            {
-              label: "File Size",
-              data: [stats.originalSize, stats.compressedSize],
-              backgroundColor: [`${colors.primary}40`, colors.primary],
-              borderColor: [colors.primary, colors.secondary],
-              borderWidth: 2,
-              borderRadius: 12,
-              borderSkipped: false,
-            },
-          ],
+    // Get decompressed algorithm colors directly
+    const getDecompressedAlgorithmColors = (mode) => {
+      const colorSchemes = {
+        huffmanCoding: {
+          primary: "#10B981",
+          secondary: "#059669",
+          accent: "#047857",
+          gradient: ["#10B981", "#059669", "#047857"],
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: false,
-            },
-            tooltip: {
-              backgroundColor: "rgba(0, 0, 0, 0.8)",
-              titleColor: "#fff",
-              bodyColor: "#fff",
-              borderColor: colors.primary,
-              borderWidth: 1,
-              cornerRadius: 8,
-              callbacks: {
-                label: function (context) {
-                  return `Size: ${formatBytes(context.raw)}`;
-                },
+        runLengthEncoding: {
+          primary: "#F59E0B",
+          secondary: "#D97706",
+          accent: "#B45309",
+          gradient: ["#F59E0B", "#D97706", "#B45309"],
+        },
+        lZ77: {
+          primary: "#8B5CF6",
+          secondary: "#7C3AED",
+          accent: "#6D28D9",
+          gradient: ["#8B5CF6", "#7C3AED", "#6D28D9"],
+        },
+      };
+      return colorSchemes[mode] || colorSchemes.huffmanCoding;
+    };
+
+    const decompressedColors = getDecompressedAlgorithmColors(
+      initialResult?.mode
+    );
+
+    // Simple animation effect for decompressed comparison chart only
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        if (decompressedAnimationStep < 1) {
+          setDecompressedAnimationStep(1);
+        }
+      }, 700); // Slightly different timing to avoid interference
+
+      return () => clearTimeout(timer);
+    }, [decompressedAnimationStep]);
+
+    // Decompressed file comparison chart useEffect
+    useEffect(() => {
+      let decompressedComparisonChart;
+
+      if (
+        decompressedComparisonChartRef.current &&
+        decompressedAnimationStep >= 1
+      ) {
+        const ctx = decompressedComparisonChartRef.current.getContext("2d");
+
+        decompressedComparisonChart = new Chart.Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: ["Original File", "Decompressed File"],
+            datasets: [
+              {
+                label: "File Size",
+                data: [
+                  decompressedStats.originalSize,
+                  decompressedStats.decompressedSize,
+                ],
+                backgroundColor: [
+                  `${decompressedColors.primary}40`,
+                  decompressedColors.primary,
+                ],
+                borderColor: [
+                  decompressedColors.primary,
+                  decompressedColors.secondary,
+                ],
+                borderWidth: 2,
+                borderRadius: 12,
+                borderSkipped: false,
               },
-            },
+            ],
           },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: {
-                color: "rgba(255, 255, 255, 0.1)",
-              },
-              ticks: {
-                color: "#fff",
-                callback: function (value) {
-                  return formatBytes(value);
-                },
-              },
-            },
-            x: {
-              grid: {
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
                 display: false,
               },
-              ticks: {
-                color: "#fff",
-                font: {
-                  weight: "bold",
+              tooltip: {
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                titleColor: "#fff",
+                bodyColor: "#fff",
+                borderColor: decompressedColors.primary,
+                borderWidth: 1,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function (context) {
+                    return `Size: ${formatBytes(context.raw)}`;
+                  },
                 },
               },
             },
-          },
-          animation: {
-            duration: 2000,
-            easing: "easeOutQuart",
-          },
-        },
-      });
-    }
-
-    // Donut Chart for Space Saved
-    if (donutChartRef.current && animationStep >= 2) {
-      const ctx = donutChartRef.current.getContext("2d");
-
-      donutChart = new Chart.Chart(ctx, {
-        type: "doughnut",
-        data: {
-          labels: ["Space Saved", "Remaining"],
-          datasets: [
-            {
-              data: [stats.spaceSaved, 100 - stats.spaceSaved],
-              backgroundColor: [colors.primary, "rgba(255, 255, 255, 0.1)"],
-              borderColor: [colors.primary, "rgba(255, 255, 255, 0.2)"],
-              borderWidth: 2,
-              cutout: "70%",
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: false,
-            },
-            tooltip: {
-              backgroundColor: "rgba(0, 0, 0, 0.8)",
-              titleColor: "#fff",
-              bodyColor: "#fff",
-              borderColor: colors.primary,
-              borderWidth: 1,
-              cornerRadius: 8,
-              callbacks: {
-                label: function (context) {
-                  return `${context.label}: ${context.parsed}%`;
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#fff",
+                  callback: function (value) {
+                    return formatBytes(value);
+                  },
+                },
+              },
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  color: "#fff",
+                  font: {
+                    weight: "bold",
+                  },
                 },
               },
             },
-          },
-          animation: {
-            duration: 2500,
-            easing: "easeOutBounce",
-          },
-        },
-      });
-    }
-
-    // Efficiency Gauge (Polar Area)
-    if (efficiencyChartRef.current && animationStep >= 3) {
-      const ctx = efficiencyChartRef.current.getContext("2d");
-
-      efficiencyChart = new Chart.Chart(ctx, {
-        type: "polarArea",
-        data: {
-          labels: [
-            "Compression Ratio",
-            "Efficiency Score",
-            "Space Optimization",
-          ],
-          datasets: [
-            {
-              data: [
-                stats.compressionRatio * 20,
-                stats.spaceSaved,
-                (stats.compressionRatio * stats.spaceSaved) / 5,
-              ],
-              backgroundColor: [
-                `${colors.primary}80`,
-                `${colors.secondary}80`,
-                `${colors.accent}80`,
-              ],
-              borderColor: [colors.primary, colors.secondary, colors.accent],
-              borderWidth: 2,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: "bottom",
-              labels: {
-                color: "#fff",
-                padding: 20,
-                font: {
-                  size: 12,
-                },
-              },
-            },
-            tooltip: {
-              backgroundColor: "rgba(0, 0, 0, 0.8)",
-              titleColor: "#fff",
-              bodyColor: "#fff",
-              borderColor: colors.primary,
-              borderWidth: 1,
-              cornerRadius: 8,
+            animation: {
+              duration: 2200,
+              easing: "easeOutQuart",
             },
           },
-          scales: {
-            r: {
-              grid: {
-                color: "rgba(255, 255, 255, 0.1)",
-              },
-              ticks: {
-                color: "#fff",
-                backdropColor: "transparent",
-              },
-            },
-          },
-          animation: {
-            duration: 3000,
-            easing: "easeOutElastic",
-          },
-        },
-      });
-    }
-
-    // Cleanup function to destroy charts when component unmounts or re-renders
-    return () => {
-      if (comparisonChart) {
-        comparisonChart.destroy();
+        });
       }
-      if (donutChart) {
-        donutChart.destroy();
-      }
-      if (efficiencyChart) {
-        efficiencyChart.destroy();
-      }
+      console.log(decompressedStats);
+
+      return () => {
+        if (decompressedComparisonChart) {
+          decompressedComparisonChart.destroy();
+        }
+      };
+    }, [
+      decompressedAnimationStep,
+      initialResult?.mode,
+      initialResult?.file_info?.compressed_file_size,
+      initialResult?.file_info?.decompressed_size,
+    ]);
+  } else {
+    // Get algorithm colors directly
+    const getAlgorithmColors = (mode) => {
+      const colorSchemes = {
+        huffmanCoding: {
+          primary: "#00d4ff",
+          secondary: "#6366f1",
+          accent: "#8b5cf6",
+          gradient: ["#00d4ff", "#6366f1", "#8b5cf6"],
+        },
+        runLengthEncoding: {
+          primary: "#ff6b6b",
+          secondary: "#ff8787",
+          accent: "#ffa8a8",
+          gradient: ["#ff6b6b", "#ff8787", "#ffa8a8"],
+        },
+        visuaLens: {
+          primary: "#51cf66",
+          secondary: "#69db7c",
+          accent: "#8ce99a",
+          gradient: ["#51cf66", "#69db7c", "#8ce99a"],
+        },
+      };
+      return colorSchemes[mode] || colorSchemes.huffmanCoding;
     };
-  }, [animationStep, colors, stats]);
+
+    const colors = getAlgorithmColors(initialResult?.mode);
+
+    // Create stats object for compression chart data
+    const stats = {
+      originalSize: initialResult?.original_size || 0,
+      compressedSize: initialResult?.compressed_size || 0,
+      compressionRatio: parseFloat(initialResult?.compression_ratio) || 0,
+      spaceSaved:
+        parseFloat(initialResult?.space_saved_percent?.replace("%", "")) || 0,
+    };
+
+    // Compression charts animation
+    useEffect(() => {
+      // Animate components in sequence
+      const timer = setTimeout(() => {
+        if (animationStep < 3) {
+          setAnimationStep(animationStep + 1);
+        }
+      }, 600);
+
+      return () => clearTimeout(timer);
+    }, [animationStep]);
+
+    // Compression charts useEffect
+    useEffect(() => {
+      let comparisonChart, donutChart, efficiencyChart;
+
+      // Comparison Bar Chart
+      if (comparisonChartRef.current && animationStep >= 1) {
+        const ctx = comparisonChartRef.current.getContext("2d");
+
+        comparisonChart = new Chart.Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: ["Original File", "Compressed File"],
+            datasets: [
+              {
+                label: "File Size",
+                data: [stats.originalSize, stats.compressedSize],
+                backgroundColor: [`${colors.primary}40`, colors.primary],
+                borderColor: [colors.primary, colors.secondary],
+                borderWidth: 2,
+                borderRadius: 12,
+                borderSkipped: false,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false,
+              },
+              tooltip: {
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                titleColor: "#fff",
+                bodyColor: "#fff",
+                borderColor: colors.primary,
+                borderWidth: 1,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function (context) {
+                    return `Size: ${formatBytes(context.raw)}`;
+                  },
+                },
+              },
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#fff",
+                  callback: function (value) {
+                    return formatBytes(value);
+                  },
+                },
+              },
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  color: "#fff",
+                  font: {
+                    weight: "bold",
+                  },
+                },
+              },
+            },
+            animation: {
+              duration: 2000,
+              easing: "easeOutQuart",
+            },
+          },
+        });
+      }
+
+      // Donut Chart for Space Saved
+      if (donutChartRef.current && animationStep >= 2) {
+        const ctx = donutChartRef.current.getContext("2d");
+
+        donutChart = new Chart.Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels: ["Space Saved", "Remaining"],
+            datasets: [
+              {
+                data: [stats.spaceSaved, 100 - stats.spaceSaved],
+                backgroundColor: [colors.primary, "rgba(255, 255, 255, 0.1)"],
+                borderColor: [colors.primary, "rgba(255, 255, 255, 0.2)"],
+                borderWidth: 2,
+                cutout: "70%",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false,
+              },
+              tooltip: {
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                titleColor: "#fff",
+                bodyColor: "#fff",
+                borderColor: colors.primary,
+                borderWidth: 1,
+                cornerRadius: 8,
+                callbacks: {
+                  label: function (context) {
+                    return `${context.label}: ${context.parsed}%`;
+                  },
+                },
+              },
+            },
+            animation: {
+              duration: 2500,
+              easing: "easeOutBounce",
+            },
+          },
+        });
+      }
+
+      // Efficiency Gauge (Polar Area)
+      if (efficiencyChartRef.current && animationStep >= 3) {
+        const ctx = efficiencyChartRef.current.getContext("2d");
+
+        efficiencyChart = new Chart.Chart(ctx, {
+          type: "polarArea",
+          data: {
+            labels: [
+              "Compression Ratio",
+              "Efficiency Score",
+              "Space Optimization",
+            ],
+            datasets: [
+              {
+                data: [
+                  stats.compressionRatio * 20,
+                  stats.spaceSaved,
+                  (stats.compressionRatio * stats.spaceSaved) / 5,
+                ],
+                backgroundColor: [
+                  `${colors.primary}80`,
+                  `${colors.secondary}80`,
+                  `${colors.accent}80`,
+                ],
+                borderColor: [colors.primary, colors.secondary, colors.accent],
+                borderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  color: "#fff",
+                  padding: 20,
+                  font: {
+                    size: 12,
+                  },
+                },
+              },
+              tooltip: {
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                titleColor: "#fff",
+                bodyColor: "#fff",
+                borderColor: colors.primary,
+                borderWidth: 1,
+                cornerRadius: 8,
+              },
+            },
+            scales: {
+              r: {
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#fff",
+                  backdropColor: "transparent",
+                },
+              },
+            },
+            animation: {
+              duration: 3000,
+              easing: "easeOutElastic",
+            },
+          },
+        });
+      }
+
+      // Cleanup function to destroy charts when component unmounts or re-renders
+      return () => {
+        if (comparisonChart) {
+          comparisonChart.destroy();
+        }
+        if (donutChart) {
+          donutChart.destroy();
+        }
+        if (efficiencyChart) {
+          efficiencyChart.destroy();
+        }
+      };
+    }, [
+      animationStep,
+      initialResult?.mode,
+      initialResult?.original_size,
+      initialResult?.compressed_size,
+      initialResult?.compression_ratio,
+      initialResult?.space_saved_percent,
+    ]);
+  }
 
   useEffect(() => {
     const newDots = Array.from({ length: 50 }, () => ({
@@ -352,7 +535,7 @@ export default function FileForgeHome() {
       icon: Workflow,
       label: "Huffman Coding",
       gradient: "from-green-500 to-emerald-500",
-      acceptedFiles: ".txt,.jpg,.jpeg,.png,.bin",
+      acceptedFiles: ".txt,.jpg,.jpeg,.png,.bin,.rle,.huff,.lz77",
       placeholder:
         "Upload a text, binary, or image file for compression or decompression...",
       type: "file",
@@ -361,7 +544,7 @@ export default function FileForgeHome() {
       icon: Settings,
       label: "Run-Length Encoding",
       gradient: "from-red-500 to-pink-500",
-      acceptedFiles: ".txt,.jpg,.jpeg,.png,.bin",
+      acceptedFiles: ".txt,.jpg,.jpeg,.png,.bin,.rle,.huff,.lz77",
       placeholder:
         "Upload a text, binary, or image file for compression or decompression...",
       type: "file",
@@ -370,7 +553,7 @@ export default function FileForgeHome() {
       icon: FunctionSquare,
       label: "LZ77",
       gradient: "from-blue-500 to-indigo-500",
-      acceptedFiles: ".txt,.jpg,.jpeg,.png,.bin",
+      acceptedFiles: ".txt,.jpg,.jpeg,.png,.bin,.rle,.huff,.lz77",
       placeholder:
         "Upload a text, binary, or image file for compression or decompression...",
       type: "file",
@@ -453,6 +636,7 @@ export default function FileForgeHome() {
     }
 
     setCompressionLoading(true);
+    setMode("Compression");
 
     try {
       const formData = new FormData();
@@ -489,7 +673,7 @@ export default function FileForgeHome() {
     }
 
     setDecompressionLoading(true);
-
+    setMode("Decompression");
     try {
       const formData = new FormData();
       formData.append("mode", selectedMode);
@@ -517,6 +701,8 @@ export default function FileForgeHome() {
     setFile(null);
     setSearchValue("");
     showToastMessage("New Chat");
+    setMode(null);
+    setInitialResult(null);
   };
 
   const IconComponent = selectedMode ? modes[selectedMode].icon : null;
@@ -776,18 +962,14 @@ export default function FileForgeHome() {
       <div className="relative z-10 min-h-screen text-white flex">
         <div className="fixed left-0 top-0 h-screen w-20 bg-gray-800/50 backdrop-blur-xl border-r border-white/10 flex flex-col items-center py-6 space-y-6 z-50">
           <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-xl blur-lg opacity-50 group-hover:opacity-75 transition-opacity"></div>
-            <div className="relative w-12 h-12 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center transform transition-transform hover:scale-110">
-              <div className="w-40 h-40 relative">
-                <img
-                  src="/logo.png"
-                  alt="FileForge Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div>
+            <div className="w-25 h-25 relative animate-[spin_3s_linear_infinite] drop-shadow-[0_0_12px_white]">
+              <img
+                src="/logo.png"
+                alt="FileForge Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
           </div>
-
           <button
             onClick={handleNewChat}
             disabled={compressionLoading || decompressionLoading}
@@ -850,7 +1032,7 @@ export default function FileForgeHome() {
                   </div>
 
                   <div className="relative z-10 flex items-center space-x-2">
-                    <div className="w-50 h-50 relative animate-[spin_3s_linear_infinite]">
+                    <div className="w-50 h-50 relative animate-[spin_3s_linear_infinite] drop-shadow-[0_0_12px_white]">
                       <img
                         src="/logo.png"
                         alt="FileForge Logo"
@@ -1967,7 +2149,7 @@ export default function FileForgeHome() {
                         </h3>
                         <div className="h-64">
                           <canvas
-                            ref={comparisonChartRef}
+                            ref={decompressedComparisonChartRef}
                             width="400"
                             height="250"
                           ></canvas>

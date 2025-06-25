@@ -34,7 +34,6 @@ def verify_token(
 
     token = authorization[7:] 
     provider = x_user_provider or "unknown"
-
     try:
         if provider == "google":
             return verify_google_token(token)
@@ -368,11 +367,12 @@ async def compression(
 @app.post("/decompression")
 async def decompression(
     mode: str = Form(...),
-    file: Optional[UploadFile] = File(None),
+    file: UploadFile = File(...),
     user: dict = Depends(verify_token) 
 ):
     try:
         # Validate mode
+        print(mode, file)
         if mode not in ["huffmanCoding", "runLengthEncoding", "lZ77"]:
             raise HTTPException(status_code=400, detail="Invalid mode specified")
 

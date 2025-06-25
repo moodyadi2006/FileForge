@@ -49,6 +49,22 @@ export const authOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 
   callbacks: {
+    async signIn({ user, account }) {
+      console.log(user);
+      if (account?.provider === "google") {
+        await dbConnect();
+        const existingUser = await UserModel.findOne({
+          email: user.email,
+        });
+
+        if (!existingUser || !existingUser.isVerified) {
+          console.log("Blocked Google sign-in: User not found or not verified");
+          return false;
+        }
+      }
+
+      return true;
+    },
     async jwt({ token, user, account }) {
       const now = Math.floor(Date.now() / 1000);
 

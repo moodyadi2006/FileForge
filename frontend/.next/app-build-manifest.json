@@ -16,15 +16,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/auth/[...nextauth]/route.js"
     ],
+    "/api/compression/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/compression/route.js"
+    ],
     "/(auth)/signIn/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(auth)/signIn/page.js"
     ],
-    "/(auth)/signUp/page": [
+    "/api/decompression/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(auth)/signUp/page.js"
+      "static/chunks/app/api/decompression/route.js"
     ],
     "/_not-found/page": [
       "static/chunks/webpack.js",
