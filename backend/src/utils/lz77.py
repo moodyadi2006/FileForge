@@ -2,7 +2,6 @@ import pickle
 import os
 from collections import Counter
 from typing import Dict, Tuple, Any, Optional, List
-import json
 
 class LZ77Compressor:
     """

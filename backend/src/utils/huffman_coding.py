@@ -1,9 +1,8 @@
 import heapq
 import pickle
 import os
-from collections import defaultdict, Counter
-from typing import Dict, Tuple, Any, Optional
-import json
+from collections import Counter
+from typing import Dict, Any
 
 class HuffmanNode:
     """Node class for Huffman tree construction"""
