@@ -4,9 +4,9 @@ from typing import Optional
 import tempfile
 import os
 from dotenv import load_dotenv
-from utils.huffman_coding import compress_file, decompress_file
-from utils.runlengthEncoding import compress_file_RLE, decompress_file_RLE, analyze_file_for_RLE
-from utils.lz77 import compress_file_LZ77, decompress_file_LZ77, analyze_file_for_LZ77
+from src.utils.huffman_coding import compress_file, decompress_file
+from src.utils.runlengthEncoding import compress_file_RLE, decompress_file_RLE, analyze_file_for_RLE
+from src.utils.lz77 import compress_file_LZ77, decompress_file_LZ77, analyze_file_for_LZ77
 import base64
 import re
 
