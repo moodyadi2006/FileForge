@@ -26,7 +26,7 @@ To design and develop an interactive web platform where users can:
 ## 🚀 Live Deployments
 
 - 🌐 **Frontend (Next.js)**: Deployed on [FileForge](https://file-forge-jitg.vercel.app)
-- 🔗 **Backend (FastAPI)**: Deployed on [Render.com](https://render.com)
+- 🔗 **Backend (FastAPI)**: Deployed on [Render.com](https://fileforge-backend-s3xy.onrender.com)
 
 ---
 
